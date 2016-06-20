@@ -12,11 +12,10 @@ using namespace std;
 vector<double> TimeCalo0,TimeCalo1,EnCalo0,EnCalo1;
 TString filenameData = "";
 
-void mergeCalibFiles() {
+void mergeCalibFiles(TString filename0 = "../20160616/run_20160616_2Na22_CalibCh0.txt",
+                     TString filename1 = "../20160616/run_20160616_2Na22_CalibCh2.txt",
+                     TString fout = "../20160616/run_20160616_2Na22_calibration.txt") {
     
-    TString filename0 = "20160613_2cm/run_20160613_CalibCh0_2cm.txt";
-    TString filename1 = "20160613_2cm/run_20160613_CalibCh2_2cm.txt";
-    TString fout = "20160613_2cm/run_20160613_calibration_2cm.txt";
     
     TimeCalo0.clear();
     TimeCalo1.clear();

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <string>
 #include "TString.h"
 #include "TH1.h"
 #include "TF1.h"
@@ -46,6 +47,16 @@ EventBuilder::~EventBuilder() {
     delete fCalibFuncChan0;
     delete fCalibFuncChan1;
 }
+//_______________________________________________
+void EventBuilder::SetFitRangeForCalibration(Double_t lowlimsCh0[], Double_t lowlimsCh1[], Double_t uplimsCh0[], Double_t uplimsCh1[]) {
+    
+    for(int i = 0; i < 2; i++) {
+        fLowLimsCh0[i] = lowlimsCh0[i];
+        fLowLimsCh1[i] = lowlimsCh1[i];
+        fUpLimsCh0[i]  = uplimsCh0[i];
+        fUpLimsCh1[i]  = uplimsCh1[i];
+    }
+}
 
 //_______________________________________________
 bool EventBuilder::ReadRaws() {
@@ -60,7 +71,7 @@ bool EventBuilder::ReadRaws() {
     fEvEn0.clear();
     fEvEn1.clear();
     
-    ifstream inFileData(Form("%s%s.txt",fdir.Data(),fFileName.Data()));
+    ifstream inFileData(Form("%s%s",fdir.Data(),fFileName.Data()));
     if(inFileData) {
         string line;
         while(getline(inFileData, line)) {
@@ -80,7 +91,7 @@ bool EventBuilder::ReadRaws() {
         }
         printf("Unpacked calo data. Events for channel 0 = %lu, for channel 2 = %lu\n",fTimeCalo0.size(),fTimeCalo1.size());
     } else {
-        printf("No file data %s found!\n",Form("%s%s.txt",fdir.Data(),fFileName.Data()));
+        printf("No file data %s found!\n",Form("%s%s",fdir.Data(),fFileName.Data()));
         return false;
     }
     return true;
@@ -97,8 +108,8 @@ void EventBuilder::BuildEvents() {
     //    TH1F *hRawEnergyCh0 = new TH1F("hRawEnergyCh0","Raw Energy channel 0; channels; entries",maxRawEnergy,0,(float)maxRawEnergy);
     //    TH1F *hRawEnergyCh1 = new TH1F("hRawEnergyCh1","Raw Energy channel 1; channels; entries",maxRawEnergy,0,(float)maxRawEnergy);
     
-//    ofstream myfile;
-//    myfile.open (Form("%sprocessed_%s.txt",fdir.Data(),fFileName.Data()));
+    //    ofstream myfile;
+    //    myfile.open (Form("%sprocessed_%s.txt",fdir.Data(),fFileName.Data()));
     
     Long_t startIndex = 0;
     for(Long_t iev0 = 0; iev0 < (Long_t)fTimeCalo0.size(); iev0++) {
@@ -107,7 +118,7 @@ void EventBuilder::BuildEvents() {
         
         double time0 = fTimeCalo0[iev0];
         if(iev0 > 0)
-        if(time0 < fTimeCalo0[iev0-1] || time0 > fTimeCalo0[iev0+1]) continue;
+            if(time0 < fTimeCalo0[iev0-1] || time0 > fTimeCalo0[iev0+1]) continue;
         double tmpdt = TMath::Power(10,12);
         double time1, dt;
         Long_t indexCh0 = iev0;
@@ -115,7 +126,7 @@ void EventBuilder::BuildEvents() {
         for(Long_t iev1 = startIndex; iev1 < (Long_t)fTimeCalo1.size(); iev1++) {
             time1 = fTimeCalo1[iev1];
             if(iev1 > 0)
-            if(time1 < fTimeCalo1[iev1-1] || time1 > fTimeCalo1[iev1+1]) continue;
+                if(time1 < fTimeCalo1[iev1-1] || time1 > fTimeCalo1[iev1+1]) continue;
             dt = TMath::Abs(time1 - time0);
             if(dt > tmpdt) break;
             else {
@@ -135,14 +146,14 @@ void EventBuilder::BuildEvents() {
         
         
         
-    //    myfile <<Form("%.0f",fTimeCalo0[indexCh0])<<" "<<Form("%.0f",fEnCalo0[indexCh0])<<" "<<Form("%.0f",fTimeCalo1[indexCh1])<<" "<<Form("%.0f",fEnCalo1[indexCh1])<<endl;
+        //    myfile <<Form("%.0f",fTimeCalo0[indexCh0])<<" "<<Form("%.0f",fEnCalo0[indexCh0])<<" "<<Form("%.0f",fTimeCalo1[indexCh1])<<" "<<Form("%.0f",fEnCalo1[indexCh1])<<endl;
         //        hDeltat->Fill(10.*(fTimeCalo1[indexCh1]-fTimeCalo0[indexCh0]));
         //        hRawEnergyCh0->Fill(fEnCalo0[indexCh0]);
         //        hRawEnergyCh1->Fill(fEnCalo1[indexCh1]);
         if(indexCh1 == (Long_t)(fTimeCalo1.size()-2))
-        break;
+            break;
     }
-   // myfile.close();
+    // myfile.close();
     
     //    TCanvas *c = new TCanvas("c","",1000,600);
     //    c->Divide(2);
@@ -173,98 +184,6 @@ void EventBuilder::SetCalibrationCurve() {
     int maxRawEnergy = pow(2,numbit)-1;
     
     Double_t ePeak[3] = {511,1274,1785};
-    Double_t lowlimsCh0[3], lowlimsCh1[3], uplimsCh0[3], uplimsCh1[3];
-    
-    if(fCalibFileName == "run3_260516" || fCalibFileName == "run4Rot_260516") {
-        lowlimsCh0[0] = 2600;
-        lowlimsCh0[1] = 6500;
-        lowlimsCh0[2] = 9300;
-        uplimsCh0[0] = 3000;
-        uplimsCh0[1] = 7100;
-        uplimsCh0[2] = 9700;
-        
-        lowlimsCh1[0] = 2600;
-        lowlimsCh1[1] = 6400;
-        lowlimsCh1[2] = 9100;
-        uplimsCh1[0] = 2850;
-        uplimsCh1[1] = 6800;
-        uplimsCh1[2] = 10200;
-    }
-    if(fCalibFileName == "run0_20160601_Na22_Al") {
-        lowlimsCh0[0] = 2800;
-        lowlimsCh0[1] = 6800;
-        lowlimsCh0[2] = 9300;
-        uplimsCh0[0] = 3100;
-        uplimsCh0[1] = 7300;
-        uplimsCh0[2] = 9900;
-        
-        lowlimsCh1[0] = 2800;
-        lowlimsCh1[1] = 6900;
-        lowlimsCh1[2] = 9100;
-        uplimsCh1[0] = 3200;
-        uplimsCh1[1] = 7500;
-        uplimsCh1[2] = 10400;
-    }
-    if(fCalibFileName == "run_20160613_calibration_2cm") {
-        lowlimsCh0[0] = 2850;
-        lowlimsCh0[1] = 7100;
-        lowlimsCh0[2] = 9300;
-        uplimsCh0[0] = 3300;
-        uplimsCh0[1] = 7700;
-        uplimsCh0[2] = 9900;
-        
-        lowlimsCh1[0] = 2700;
-        lowlimsCh1[1] = 6700;
-        lowlimsCh1[2] = 9100;
-        uplimsCh1[0] = 3000;
-        uplimsCh1[1] = 7200;
-        uplimsCh1[2] = 10400;
-    }
-    if(fCalibFileName == "run1_20160531_Na22_Teflon") {
-        lowlimsCh0[0] = 2800;
-        lowlimsCh0[1] = 7100;
-        lowlimsCh0[2] = 9300;
-        uplimsCh0[0] = 3300;
-        uplimsCh0[1] = 7600;
-        uplimsCh0[2] = 9900;
-        
-        lowlimsCh1[0] = 2800;
-        lowlimsCh1[1] = 6900;
-        lowlimsCh1[2] = 9100;
-        uplimsCh1[0] = 3050;
-        uplimsCh1[1] = 7300;
-        uplimsCh1[2] = 10400;
-    }
-    if(fCalibFileName == "run0_20160531_Na22_Teflon") {
-        lowlimsCh0[0] = 2800;
-        lowlimsCh0[1] = 7100;
-        lowlimsCh0[2] = 9300;
-        uplimsCh0[0] = 3200;
-        uplimsCh0[1] = 7700;
-        uplimsCh0[2] = 9900;
-        
-        lowlimsCh1[0] = 2750;
-        lowlimsCh1[1] = 6850;
-        lowlimsCh1[2] = 9100;
-        uplimsCh1[0] = 3100;
-        uplimsCh1[1] = 7300;
-        uplimsCh1[2] = 10400;
-    }
-    if(fCalibFileName == "run_20160613_650_0") {
-        lowlimsCh0[0] = 2900;
-        lowlimsCh0[1] = 7100;
-        lowlimsCh0[2] = 9300;
-        uplimsCh0[0] = 3300;
-        uplimsCh0[1] = 7700;
-        uplimsCh0[2] = 9900;
-        
-        lowlimsCh1[0] = 2750;
-        lowlimsCh1[1] = 6850;
-        lowlimsCh1[2] = 9100;
-        uplimsCh1[0] = 3000;
-        uplimsCh1[1] = 7300;
-        uplimsCh1[2] = 10400;
-    }
     vector<Double_t> gPeaks0, gPeaks1;
     
     TH1F *hRawEnergyCh0, *hRawEnergyCh1;
@@ -281,43 +200,27 @@ void EventBuilder::SetCalibrationCurve() {
         hRawEnergyCh1->Fill(fEvEn1[i]);
     }
     
-    //    }
-    //        new TCanvas;
-    //        hRawEnergyCh0->Draw();
-    //        hRawEnergyCh1->Draw("same");
-    
     TF1 *fgaus = new TF1("fgaus","gaus", 0,16000);
+    
     //channel 1
-    hRawEnergyCh1->Fit("fgaus","","",lowlimsCh1[0],uplimsCh1[0]);
+    hRawEnergyCh1->Fit("fgaus","","",fLowLimsCh1[0],fUpLimsCh1[0]);
     Double_t m = fgaus->GetParameter(1);
     gPeaks1.push_back(m);
-    hRawEnergyCh1->Fit("fgaus","","",lowlimsCh1[1],uplimsCh1[1]);
+    hRawEnergyCh1->Fit("fgaus","","",fLowLimsCh1[1],fUpLimsCh1[1]);
     m = fgaus->GetParameter(1);
     gPeaks1.push_back(m);
-    hRawEnergyCh1->Fit("fgaus","","",lowlimsCh1[2],uplimsCh1[2]);
-    m = fgaus->GetParameter(1);
-    gPeaks1.push_back(m);
-    //channel 0
-    //        new TCanvas;
-    //        hRawEnergyCh0->SetLineColor(kBlue);
-    hRawEnergyCh0->Fit("fgaus","","",lowlimsCh0[0],uplimsCh0[0]);
-    m = fgaus->GetParameter(1);
-    gPeaks0.push_back(m);
-    hRawEnergyCh0->Fit("fgaus","","",lowlimsCh0[1],uplimsCh0[1]);
-    m = fgaus->GetParameter(1);
-    gPeaks0.push_back(m);
-    hRawEnergyCh0->Fit("fgaus","","",lowlimsCh0[2],uplimsCh0[2]);
-    m = fgaus->GetParameter(1);
-    gPeaks0.push_back(m);
     
-    //        TCanvas *cg = new TCanvas("cg","",700,600);
-    //        gPad->SetLogy();
-    //        hRawEnergyCh1->Draw();
+    //channel 0
+    hRawEnergyCh0->Fit("fgaus","","",fLowLimsCh0[0],fUpLimsCh0[0]);
+    m = fgaus->GetParameter(1);
+    gPeaks0.push_back(m);
+    hRawEnergyCh0->Fit("fgaus","","",fLowLimsCh0[1],fUpLimsCh0[1]);
+    m = fgaus->GetParameter(1);
+    gPeaks0.push_back(m);
     
     TH1F *h0Calib = new TH1F("h0Calib","Energy vs peak; peak mean; energy (keV)",maxRawEnergy,0,maxRawEnergy);
     TH1F *h1Calib = new TH1F("h1Calib","Energy vs peak; peak mean; energy (keV)",maxRawEnergy,0,maxRawEnergy);
-    int ipmax = (int)gPeaks0.size();
-    if(fCalibFileName == "run1_20160531_Na22_Teflon" || fCalibFileName == "run0_20160531_Na22_Teflon" || fCalibFileName == "run0_20160601_Na22_Al" || fCalibFileName == "run_20160613_calibration_2cm") ipmax = 2;
+    int ipmax = 2;
     for(int ip = 0; ip < ipmax; ip++) {
         h0Calib->Fill(gPeaks0[ip],ePeak[ip]);
         h1Calib->Fill(gPeaks1[ip],ePeak[ip]);
@@ -342,10 +245,13 @@ void EventBuilder::DoCalibration() {
     Double_t e1Min = fCalibFuncChan1->Eval(0);
     Double_t e1Max = fCalibFuncChan1->Eval(16000);
     
-//    TH1F *hCalibRawEnergyCh0 = new TH1F("hCalibRawEnergyCh0", "Raw energy ch0 - calibrated; keV",1000,e0Min,e0Max);
-//    TH1F *hCalibRawEnergyCh1 = new TH1F("hCalibRawEnergyCh1", "Raw energy ch1 - calibrated; keV",1000,e1Min,e1Max);
+    //    TH1F *hCalibRawEnergyCh0 = new TH1F("hCalibRawEnergyCh0", "Raw energy ch0 - calibrated; keV",1000,e0Min,e0Max);
+    //    TH1F *hCalibRawEnergyCh1 = new TH1F("hCalibRawEnergyCh1", "Raw energy ch1 - calibrated; keV",1000,e1Min,e1Max);
     
-    TFile f(Form("%sAnalysisResults_Calibrated_%s.root",fdir.Data(),fFileName.Data()),"recreate");
+    string newname = (string)fFileName;
+    newname = newname.substr(0, newname.find("."));
+    
+    TFile f(Form("%sAnalysisResults_Calibrated_%s.root",fdir.Data(),newname.data()),"recreate");
     TTree *tree = new TTree("t","");
     Double_t en0, en1, time0, time1;
     tree->Branch("time0",&time0,"time0/D");
@@ -360,19 +266,19 @@ void EventBuilder::DoCalibration() {
         time0 = fEvTime0[i];
         time1 = fEvTime1[i];
         tree->Fill();
-//        hCalibRawEnergyCh0->Fill(en0);
-//        hCalibRawEnergyCh1->Fill(en1);
+        //        hCalibRawEnergyCh0->Fill(en0);
+        //        hCalibRawEnergyCh1->Fill(en1);
     }
     
     tree->Write();
-//    hCalibRawEnergyCh0->Write();
-//    hCalibRawEnergyCh1->Write();
+    //    hCalibRawEnergyCh0->Write();
+    //    hCalibRawEnergyCh1->Write();
     
-//    TCanvas *cc = new TCanvas("cc","",700,600);
-//    gPad->SetLogy();
-//    hCalibRawEnergyCh1->Draw();
-//    hCalibRawEnergyCh0->SetLineColor(kRed);
-//    hCalibRawEnergyCh0->Draw("same");
+    //    TCanvas *cc = new TCanvas("cc","",700,600);
+    //    gPad->SetLogy();
+    //    hCalibRawEnergyCh1->Draw();
+    //    hCalibRawEnergyCh0->SetLineColor(kRed);
+    //    hCalibRawEnergyCh0->Draw("same");
     //hRawEnergyCh1->Draw("same");
     
 }
