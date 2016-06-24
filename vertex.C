@@ -7,6 +7,8 @@
 #include <TMath.h>
 #include <TCanvas.h>
 #include <TAxis.h>
+#include <TString.h>
+#include <sstream>
 
 using namespace std;
 
@@ -168,18 +170,19 @@ private:
 };
 
 
-pair<vector<Measurement>, vector<Measurement> > searchVertex(vector<Measurement>& measures, int col = 2){
+pair<double, int> searchVertex(vector<Measurement>& measures, TCanvas *canvas){
   
   TMatrixD C_n(2,2);
   TMatrixD x_v(2,1);
   
-  //TCanvas *c1 = new TCanvas("measurements","measurements",200,10,600,400);
+
+  canvas->cd();
 
   for(uint k = 0; k < measures.size(); ++k){
-    measures[k].function()->Draw( (k == 0 && col == 2) ? "" : "same");
+    measures[k].function()->Draw(k == 0 ? "" : "same");
     //measures[k].function()->Draw("same");
     measures[k].function()->GetYaxis()->SetRangeUser(-100,200);
-    measures[k].function()->SetLineColor(col);
+    //measures[k].function()->SetLineColor(col);
 
     measures[k].filter();
     
@@ -217,59 +220,109 @@ pair<vector<Measurement>, vector<Measurement> > searchVertex(vector<Measurement>
   }
   
   ndof = 2*measures.size()-2;
-  cout << "Chi2 of the vertex: " << chi2 << " with n.d.f.: " << ndof << endl;
+  cout << "Chi2 of the vertex: " << chi2 << " with n.d.f.: " << ndof << " Probability: " << TMath::Prob(chi2, ndof) << endl;
+  return make_pair(chi2, ndof);
 
-  // Search for vertices
-  vector<Measurement> ensamble1;
-  vector<Measurement> ensamble2;
 
-  for(uint k = 0; k < measures.size(); ++k){
+  
+  // // Search for sub-vertices
+  // vector<Measurement> ensamble1;
+  // vector<Measurement> ensamble2;
+
+  // for(uint k = 0; k < measures.size(); ++k){
     
-    measures[k].inverseFilter(x_v,C_n);
-    cout << "Measurement " << k << ": chi2_S = " << measures[k].KF()->chi2_S() << ", reduced: " << measures[k].KF()->chi2_S()/(ndof-2) 
-	 << " Prob: " << TMath::Prob(measures[k].KF()->chi2_S(), ndof-2) <<endl;
+  //   measures[k].inverseFilter(x_v,C_n);
+  //   cout << "Measurement " << k << ": chi2_S = " << measures[k].KF()->chi2_S() << ", reduced: " << measures[k].KF()->chi2_S()/(ndof-2) 
+  // 	 << " Prob: " << TMath::Prob(measures[k].KF()->chi2_S(), ndof-2) <<endl;
 
-    if(TMath::Prob(measures[k].KF()->chi2_S(), ndof-2) < 0.05)
-      ensamble2.push_back(measures[k]);
-    else
-      ensamble1.push_back(measures[k]);
-  }
-  return make_pair(ensamble1, ensamble2);
+  //   if(TMath::Prob(measures[k].KF()->chi2_S(), ndof-2) < 0.05)
+  //     ensamble2.push_back(measures[k]);
+  //   else
+  //     ensamble1.push_back(measures[k]);
+  // }
+  // return make_pair(ensamble1, ensamble2);
   
 }
 
 void vertex(){
   cout << "ciao" << endl;
 
-  vector<Measurement> measures;
+  vector<Measurement> measures0;
+  measures0.push_back(Measurement::convert(50.353, 0.00001, 0.224, 0.1, 10, 0.1));
+  measures0.push_back(Measurement::convert(94.781, 0.00001, 0.307, 0.1, 10, 0.1));
+
+  vector<Measurement> measures45;
+  measures45.push_back(Measurement::convert(49.332, -1     , 0.259, 0.1, 10, 0.1));
+  measures45.push_back(Measurement::convert(93.909, -1     , 0.229, 0.1, 10, 0.1)); 
+
+  vector<Measurement> measures120;
+  measures120.push_back(Measurement::convert(60.367,  1.732 , 0.229, 0.1, 10, 0.1)); 
+
+  vector<Measurement> measures240;
+  measures240.push_back(Measurement::convert(57.190, -1.732 , 0.280, 0.1, 10, 0.1)); 
+  measures240.push_back(Measurement::convert(95.361, -1.732 , 0.182, 0.1, 10, 0.1)); 
+
+  vector<vector<Measurement> > measSets;
+
+  for(vector<Measurement>::const_iterator it0 = measures0.begin(); it0 != measures0.end(); ++it0)
+    for(vector<Measurement>::const_iterator it45 = measures45.begin(); it45 != measures45.end(); ++it45)
+      for(vector<Measurement>::const_iterator it120 = measures120.begin(); it120 != measures120.end(); ++it120)
+	for(vector<Measurement>::const_iterator it240 = measures240.begin(); it240 != measures240.end(); ++it240){
+	  vector<Measurement> a;
+	  a.push_back(*it0); a.push_back(*it45); a.push_back(*it120); a.push_back(*it240);
+	  measSets.push_back(a);
+	}
+
+  cout << "Number of starting ensambles " << measSets.size() << endl;
+
+  //vector<Measurement> measures;
   //measures.push_back(Measurement(1,2,0.5,0.1,0.1,0.01,0.,0.,0.));
   //measures.push_back(Measurement(4,2,-0.2,0.1,0.1,0.01,0.,0.,0.));
   //measures.push_back(Measurement(4,2,1,0.1,0.1,0.01,0.,0.,0.));
   //measures.push_back(Measurement(1,2,1,0.1,0.1,0.01,0.,0.,0.));
 
-  measures.push_back(Measurement::convert(50.353, 0.00001, 0.224, 0.1, 10, 0.1));
-  measures.push_back(Measurement::convert(94.781, 0.00001, 0.307, 0.1, 10, 0.1));
-  measures.push_back(Measurement::convert(49.332, -1     , 0.259, 0.1, 10, 0.1));
-  measures.push_back(Measurement::convert(93.909, -1     , 0.229, 0.1, 10, 0.1)); 
-  measures.push_back(Measurement::convert(60.367,  1.732 , 0.229, 0.1, 10, 0.1)); 
-  measures.push_back(Measurement::convert(57.190, -1.732 , 0.280, 0.1, 10, 0.1)); 
-  measures.push_back(Measurement::convert(95.361, -1.732 , 0.182, 0.1, 10, 0.1)); 
+  //measures.push_back(Measurement::convert(50.353, 0.00001, 0.224, 0.1, 10, 0.1));
+  //measures.push_back(Measurement::convert(94.781, 0.00001, 0.307, 0.1, 10, 0.1));
+  //measures.push_back(Measurement::convert(49.332, -1     , 0.259, 0.1, 10, 0.1));
+  //measures.push_back(Measurement::convert(93.909, -1     , 0.229, 0.1, 10, 0.1)); 
+  //measures.push_back(Measurement::convert(60.367,  1.732 , 0.229, 0.1, 10, 0.1)); 
+  //measures.push_back(Measurement::convert(57.190, -1.732 , 0.280, 0.1, 10, 0.1)); 
+  //measures.push_back(Measurement::convert(95.361, -1.732 , 0.182, 0.1, 10, 0.1)); 
  
   // -------------------------------------------------------------------------
-  cout<<measures.size()<<endl;
+  //cout<<measures.size()<<endl;
 
-  
+  vector<TCanvas*> canvasses;
 
-  pair<vector<Measurement>, vector<Measurement> > split = searchVertex(measures);
-  if(split.second.size() == 0) return;
+  vector<int> goodEnsambles;
+
+  for(uint e = 0; e < measSets.size(); ++e){
+    cout << "\n\n\n\n Ensamble #" << e << endl;
+    string res;
+    ostringstream convert;
+    convert << e;
+    res = convert.str();
+
+    canvasses.push_back(new TCanvas(TString("c_"+res)  , TString("measurements "+res)  , 200,10,600,400));
+    pair<double, int> chi2_ndof = searchVertex(measSets[e],canvasses[e]);
+    if(TMath::Prob(chi2_ndof.first, chi2_ndof.second) > 0.05)
+      goodEnsambles.push_back(e);
+  }
+
+  for(uint v = 0; v < goodEnsambles.size(); ++v){
+    cout << goodEnsambles[v] << endl;
+  }
+    
+
+  //if(split.second.size() == 0) return;
 
   //return;
   
-  cout << "Search for vertex #1" << endl;
-  pair<vector<Measurement>, vector<Measurement> > split1 = searchVertex(split.first,3); // green
+  //cout << "Search for vertex #1" << endl;
+  // pair<vector<Measurement>, vector<Measurement> > split1 = searchVertex(split.first,3); // green
 
-  cout << "Search for vertex #2" << endl;
-  pair<vector<Measurement>, vector<Measurement> > split2 = searchVertex(split.second,4); // blue
+  //  cout << "Search for vertex #2" << endl;
+  //pair<vector<Measurement>, vector<Measurement> > split2 = searchVertex(split.second,4); // blue
   
 
 }
