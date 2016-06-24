@@ -4,15 +4,116 @@
 
 #include <TF1.h>
 #include <TEllipse.h>
+#include <TMath.h>
+#include <TCanvas.h>
+#include <TAxis.h>
 
 using namespace std;
+
+class KFOperations{
+public:
+  KFOperations(){}
+
+  void filter(const TMatrixD& measure, const TMatrixD& covariance){
+    
+    G.ResizeTo(covariance);
+    G = covariance;
+    G.Invert();
+
+    ce.ResizeTo(3,1);
+    ce[1][0] = measure[1][0];
+
+    A.ResizeTo(3,2);
+    A[0][0] = 1;
+    A[0][1] = -measure[2][0];
+
+    A_T.ResizeTo(A);
+    A_T = A;
+    A_T.Transpose(A_T);
+
+    B.ResizeTo(3,1);
+    B[0][0] =  measure[1][0];
+    B[2][0] =  1;
+
+    B_T.ResizeTo(B);
+    B_T = B;
+    B_T.Transpose(B_T);
+
+    TMatrixD Wtemp = (B_T*G*B).Invert();
+    W.ResizeTo(Wtemp);
+    W = Wtemp;
+    
+    TMatrixD G_Btemp = G - G*B*W*B_T*G;
+    G_B.ResizeTo(G_Btemp);
+    G_B = G_Btemp;
+
+    C_vtx_.ResizeTo(2,2);
+    C_vtx_ = A_T*G_B*A;
+    x_vtx_.ResizeTo(2,1);
+    x_vtx_ = A_T*G_B*(measure-ce);
+
+
+  }
+
+
+  void smooth(const TMatrixD &measure, const TMatrixD & x_v){
+    TMatrixD newDir = W * B_T * G * (measure-ce-A * x_v);
+    // compute full chi2
+    TMatrixD p_n = ce + A*x_v + B* newDir;
+    TMatrixD r_n = measure - p_n;
+    TMatrixD r_n_T = r_n;
+    r_n_T.Transpose(r_n_T);
+
+    chi2_ = (r_n_T * G * r_n)[0][0];
+    
+  } 
+
+  void inverseFilter(const TMatrixD &measure, const TMatrixD &x_v, const TMatrixD &C_n){
+    TMatrixD C_n_1(TMatrixD::kInverted,C_n);
+    TMatrixD C_n_star_1 = C_n_1 - A_T*G_B*A;
+    TMatrixD C_n_star(TMatrixD::kInverted,C_n_star_1);
+    TMatrixD x_v_star = C_n_star*(C_n_1*x_v - A_T*G_B*(measure-ce));
+    TMatrixD r = x_v-x_v_star;
+    TMatrixD r_T(TMatrixD::kTransposed,r);
+    // cout << "-- chi2 " << chi2_ << endl;
+    // cout << (r_T*C_n_star_1*r)[0][0] << endl;
+
+    chi2_S_ = (r_T*C_n_star_1*r)[0][0] + chi2_ ;
+    // cout << "-- chi2 " << chi2_S_ << endl;
+  }
+
+
+  double chi2() const {return chi2_;}
+  double chi2_S() const {return chi2_S_;}
+
+  TMatrixD C_vtx() const {return C_vtx_;}
+  TMatrixD x_vtx() const {return x_vtx_;} 
+
+  private:
+  // Matrices for KF
+  TMatrixD G;// = measures[k].covariance();
+  TMatrixD ce;//(3,1);
+  TMatrixD A;//(3,2);
+  TMatrixD A_T;// = A_k;
+  TMatrixD B;//(3,1);
+  TMatrixD B_T;// = B_k;
+  TMatrixD W;
+  TMatrixD G_B;
+  TMatrixD C_vtx_;
+  TMatrixD x_vtx_; 
+
+  double chi2_;
+  double chi2_S_;
+
+};
 
 
 class Measurement{
 public:
+  // Be careful, x_k[2][0] is dx/dy, so when translating into a straight line in the (x,y) plane m = 1/x_k[2][0]
   Measurement(const double& x, const double& y, const double& dxdy, 
 	      const double& sx2, const double& sy2, const double& sdxdy2, 
-	      const double& cxy = 0, const double& cxdxdy = 0, const double& cydxdy = 0){
+	      const double& cxy, const double& cxdxdy, const double& cydxdy){
   
 
     measure_.ResizeTo(3,1);
@@ -21,140 +122,154 @@ public:
     measure_[0][0] = x; measure_[1][0] = y; measure_[2][0] = dxdy;
     covariance_[0][0] = sx2; covariance_[1][1] = sy2;    covariance_[2][2] = sdxdy2;
     covariance_[0][1] = cxy; covariance_[0][2] = cxdxdy; covariance_[1][2] = cydxdy;
+
+    func_ = new TF1("a","pol1",-100,100);
+    func_->SetParameter(0,measure()[1][0]-measure()[0][0]/measure()[2][0]);
+    func_->SetParameter(1,1./measure()[2][0]);
+
+    // do the KF k-step
+    KFOperations_ = new KFOperations();
+
   }
+
+  static Measurement convert(const double& q, const double m, const double& sq, const double &sm, const double &y_ref, const double &sy_ref){
+    
+    return Measurement((y_ref-q)/m, y_ref, 1./m, 
+		       sqrt(pow(sy_ref/m,2)+pow(sq/m,2)+pow(sm*(y_ref-q)/(m*m),2)), sy_ref, sm, 
+		       0., 0., 0.);
+    
+    
+    
+  }
+
+  //  Measurement(const Measurement &meas){
+  //  (*this).measure_      = meas.measure();
+  //  (*this).covariance_   = meas.covariance();
+  //  //(*this).func_         = (TF1*)meas.function()->Clone();
+  //  (*this).KFOperations_ = meas.KF();
+  //}
+
   
   TMatrixD measure() const {return measure_;}
   TMatrixD covariance() const {return covariance_;}
-  
-  
+
+  TF1 *function()  {return func_;}
+  KFOperations *KF() const {return KFOperations_;}
+  void filter()                                               {KF()->filter(measure(),covariance());}
+  void smooth(const TMatrixD& x_v)                            {KF()->smooth(measure(),x_v);}
+  void inverseFilter(const TMatrixD &x_v, const TMatrixD &C_n){KF()->inverseFilter(measure(), x_v, C_n);}
+
+
 private:
   TMatrixD measure_;
   TMatrixD covariance_;
+  TF1 *func_;
+  KFOperations *KFOperations_;
 };
 
-void vertex(){
-  cout << "ciao" << endl;
 
-  //TMatrixD x0(2,1);
-
-  // Be careful, x_k[2][0] is dx/dy, so when translating into a straight line in the (x,y) plane m = 1/x_k[2][0]
-  TMatrixD x_1(3,1);
-  x_1[0][0] = 1; x_1[1][0] = 2; x_1[2][0] = 0.5;
-  TMatrixD cov_1(3,3);
-  cov_1[0][0] = 0.1; cov_1[1][1] = 0.1; cov_1[2][2] = 0.01;
+pair<vector<Measurement>, vector<Measurement> > searchVertex(vector<Measurement>& measures, int col = 2){
   
-
-  TMatrixD x_2(3,1);
-  x_2[0][0] = 4; x_2[1][0] = 2; x_2[2][0] = -0.2;
-  TMatrixD cov_2(3,3);
-  cov_2[0][0] = 0.1; cov_2[1][1] = 0.1; cov_2[2][2] = 0.01;
-
-
-  TMatrixD x_3(3,1);
-  x_3[0][0] = 4; x_3[1][0] = 2; x_3[2][0] = 1;
-  TMatrixD cov_3(3,3);
-  cov_3[0][0] = 0.1; cov_3[1][1] = 0.1; cov_3[2][2] = 0.01;
-
-
-
-
-  vector<TMatrixD> measures;
-  vector<TMatrixD> cov;
-
-  measures.push_back(x_1); cov.push_back(cov_1);
-  measures.push_back(x_2); cov.push_back(cov_2);
-  measures.push_back(x_3); cov.push_back(cov_3);
-  
- 
-  // -------------------------------------------------------------------------
-  
-
-
-  // Derived quantitities
   TMatrixD C_n(2,2);
   TMatrixD x_v(2,1);
- 
-  vector<TMatrixD> A; vector<TMatrixD> W; vector<TMatrixD> B_T; vector<TMatrixD> G; vector<TMatrixD> ce;
-  vector<TMatrixD> B;
+  
+  //TCanvas *c1 = new TCanvas("measurements","measurements",200,10,600,400);
 
-  vector<TF1*> measureGraphs;
   for(uint k = 0; k < measures.size(); ++k){
-    measureGraphs.push_back(new TF1("a","pol1",-10,10));
-    measureGraphs[k]->SetParameter(0,measures[k][1][0]-measures[k][0][0]/measures[k][2][0]);
-    measureGraphs[k]->SetParameter(1,1./measures[k][2][0]);
-    measureGraphs[k]->Draw(k == 0 ? "" : "same");
+    measures[k].function()->Draw( (k == 0 && col == 2) ? "" : "same");
+    //measures[k].function()->Draw("same");
+    measures[k].function()->GetYaxis()->SetRangeUser(-100,200);
+    measures[k].function()->SetLineColor(col);
 
-    TMatrixD G_k = cov[k];
-    G_k.Invert();
-    G.push_back(G_k);
-
-
-    TMatrixD ce_k(3,1);
-    ce_k[1][0] = measures[k][1][0];
-    ce.push_back(ce_k);
-
-    TMatrixD A_k(3,2);
-    A_k[0][0] = 1;
-    A_k[0][1] = -measures[k][2][0];
-    A.push_back(A_k);
-
-    TMatrixD A_k_T = A_k;
-    A_k_T.Transpose(A_k_T);
-
-    TMatrixD B_k(3,1);
-    B_k[0][0] =  measures[k][1][0];
-    B_k[2][0] =  1;
-    B.push_back(B_k);
-
-    TMatrixD B_k_T = B_k;
-    B_k_T.Transpose(B_k_T);
-    B_T.push_back(B_k_T);
-
-    TMatrixD W_k = (B_k_T*G_k*B_k).Invert();
-    W.push_back(W_k);
+    measures[k].filter();
     
-    TMatrixD G_k_B = G_k - G_k*B_k*W_k*B_k_T*G_k;
-
-    C_n += A_k_T*G_k_B*A_k;
-    x_v += A_k_T*G_k_B*(measures[k]-ce_k);
+    C_n += measures[k].KF()->C_vtx();
+    x_v += measures[k].KF()->x_vtx();
   }
-
+  
   C_n.Invert();
   x_v = C_n * x_v;
-
+  
   cout << "Vertex position and its uncertainties is" << endl; 
   x_v.Print();
   C_n.Print();
   cout << endl;
-
+  
   // TODO: add correlatons
   //TVectorD eigenValues;
   //TMatrixD eigenVectors = C_n.EigenVectors(eigenValues); 
   //eigenValues.Print();
   //eigenVectors.Print();
-
+  
   TEllipse *vpos = new TEllipse(x_v[0][0],x_v[1][0],C_n[0][0],C_n[1][1],0,360);
   vpos->Draw();
-
+  
   // Compute the new direction and the full covariance matrix
-  vector<TMatrixD> newdirections;
-  TMatrixD chi2(1,1);
+  double chi2 = 0.;
+  int ndof = 0;
+  
   for(uint k = 0; k < measures.size(); ++k){
-
-    newdirections.push_back(W[k]*B_T[k]*G[k]*(measures[k]-ce[k]-A[k]*x_v));
-
-    // compute full chi2
-    TMatrixD p_n_k = ce[k] + A[k]*x_v + B[k]*newdirections[k];
-    TMatrixD r_n_k = measures[k] - p_n_k;
-    TMatrixD r_n_k_T = r_n_k;
-    r_n_k_T.Transpose(r_n_k_T);
-
-    chi2 += r_n_k_T*G[k]*r_n_k;
-
+    
+    measures[k].smooth(x_v);
+    
+    chi2 += measures[k].KF()->chi2();
+    
   }
   
-  cout << "Chi2 of the vertex" << endl;
-  chi2.Print();
-  cout << "n.d.f.: " << 2*measures.size()-2 << endl;
+  ndof = 2*measures.size()-2;
+  cout << "Chi2 of the vertex: " << chi2 << " with n.d.f.: " << ndof << endl;
+
+  // Search for vertices
+  vector<Measurement> ensamble1;
+  vector<Measurement> ensamble2;
+
+  for(uint k = 0; k < measures.size(); ++k){
+    
+    measures[k].inverseFilter(x_v,C_n);
+    cout << "Measurement " << k << ": chi2_S = " << measures[k].KF()->chi2_S() << ", reduced: " << measures[k].KF()->chi2_S()/(ndof-2) 
+	 << " Prob: " << TMath::Prob(measures[k].KF()->chi2_S(), ndof-2) <<endl;
+
+    if(TMath::Prob(measures[k].KF()->chi2_S(), ndof-2) < 0.05)
+      ensamble2.push_back(measures[k]);
+    else
+      ensamble1.push_back(measures[k]);
+  }
+  return make_pair(ensamble1, ensamble2);
+  
+}
+
+void vertex(){
+  cout << "ciao" << endl;
+
+  vector<Measurement> measures;
+  //measures.push_back(Measurement(1,2,0.5,0.1,0.1,0.01,0.,0.,0.));
+  //measures.push_back(Measurement(4,2,-0.2,0.1,0.1,0.01,0.,0.,0.));
+  //measures.push_back(Measurement(4,2,1,0.1,0.1,0.01,0.,0.,0.));
+  //measures.push_back(Measurement(1,2,1,0.1,0.1,0.01,0.,0.,0.));
+
+  measures.push_back(Measurement::convert(50.353, 0.00001, 0.224, 0.1, 10, 0.1));
+  measures.push_back(Measurement::convert(94.781, 0.00001, 0.307, 0.1, 10, 0.1));
+  measures.push_back(Measurement::convert(49.332, -1     , 0.259, 0.1, 10, 0.1));
+  measures.push_back(Measurement::convert(93.909, -1     , 0.229, 0.1, 10, 0.1)); 
+  measures.push_back(Measurement::convert(60.367,  1.732 , 0.229, 0.1, 10, 0.1)); 
+  measures.push_back(Measurement::convert(57.190, -1.732 , 0.280, 0.1, 10, 0.1)); 
+  measures.push_back(Measurement::convert(95.361, -1.732 , 0.182, 0.1, 10, 0.1)); 
+ 
+  // -------------------------------------------------------------------------
+  cout<<measures.size()<<endl;
+
+  
+
+  pair<vector<Measurement>, vector<Measurement> > split = searchVertex(measures);
+  if(split.second.size() == 0) return;
+
+  //return;
+  
+  cout << "Search for vertex #1" << endl;
+  pair<vector<Measurement>, vector<Measurement> > split1 = searchVertex(split.first,3); // green
+
+  cout << "Search for vertex #2" << endl;
+  pair<vector<Measurement>, vector<Measurement> > split2 = searchVertex(split.second,4); // blue
+  
 
 }
