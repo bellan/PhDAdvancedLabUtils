@@ -7,28 +7,63 @@
 
 using namespace std;
 
+
+class Measurement{
+public:
+  Measurement(const double& x, const double& y, const double& dxdy, 
+	      const double& sx2, const double& sy2, const double& sdxdy2, 
+	      const double& cxy = 0, const double& cxdxdy = 0, const double& cydxdy = 0){
+  
+
+    measure_.ResizeTo(3,1);
+    covariance_.ResizeTo(3,3);
+
+    measure_[0][0] = x; measure_[1][0] = y; measure_[2][0] = dxdy;
+    covariance_[0][0] = sx2; covariance_[1][1] = sy2;    covariance_[2][2] = sdxdy2;
+    covariance_[0][1] = cxy; covariance_[0][2] = cxdxdy; covariance_[1][2] = cydxdy;
+  }
+  
+  TMatrixD measure() const {return measure_;}
+  TMatrixD covariance() const {return covariance_;}
+  
+  
+private:
+  TMatrixD measure_;
+  TMatrixD covariance_;
+};
+
 void vertex(){
   cout << "ciao" << endl;
 
   //TMatrixD x0(2,1);
-  
-  TMatrixD r_1(3,1);
-  r_1[0][0] = 1; r_1[1][0] = 2; r_1[2][0] = 1;
+
+  // Be careful, x_k[2][0] is dx/dy, so when translating into a straight line in the (x,y) plane m = 1/x_k[2][0]
+  TMatrixD x_1(3,1);
+  x_1[0][0] = 1; x_1[1][0] = 2; x_1[2][0] = 0.5;
   TMatrixD cov_1(3,3);
   cov_1[0][0] = 0.1; cov_1[1][1] = 0.1; cov_1[2][2] = 0.01;
   
 
-  TMatrixD r_2(3,1);
-  r_2[0][0] = 4; r_2[1][0] = 2; r_2[2][0] = -1;
+  TMatrixD x_2(3,1);
+  x_2[0][0] = 4; x_2[1][0] = 2; x_2[2][0] = -0.2;
   TMatrixD cov_2(3,3);
   cov_2[0][0] = 0.1; cov_2[1][1] = 0.1; cov_2[2][2] = 0.01;
+
+
+  TMatrixD x_3(3,1);
+  x_3[0][0] = 4; x_3[1][0] = 2; x_3[2][0] = 1;
+  TMatrixD cov_3(3,3);
+  cov_3[0][0] = 0.1; cov_3[1][1] = 0.1; cov_3[2][2] = 0.01;
+
+
 
 
   vector<TMatrixD> measures;
   vector<TMatrixD> cov;
 
-  measures.push_back(r_1); cov.push_back(cov_1);
-  measures.push_back(r_2); cov.push_back(cov_2);
+  measures.push_back(x_1); cov.push_back(cov_1);
+  measures.push_back(x_2); cov.push_back(cov_2);
+  measures.push_back(x_3); cov.push_back(cov_3);
   
  
   // -------------------------------------------------------------------------
@@ -45,8 +80,8 @@ void vertex(){
   vector<TF1*> measureGraphs;
   for(uint k = 0; k < measures.size(); ++k){
     measureGraphs.push_back(new TF1("a","pol1",-10,10));
-    measureGraphs[k]->SetParameter(0,measures[k][1][0]-measures[k][2][0]*measures[k][0][0]);
-    measureGraphs[k]->SetParameter(1,measures[k][2][0]);
+    measureGraphs[k]->SetParameter(0,measures[k][1][0]-measures[k][0][0]/measures[k][2][0]);
+    measureGraphs[k]->SetParameter(1,1./measures[k][2][0]);
     measureGraphs[k]->Draw(k == 0 ? "" : "same");
 
     TMatrixD G_k = cov[k];
@@ -87,11 +122,18 @@ void vertex(){
   C_n.Invert();
   x_v = C_n * x_v;
 
+  cout << "Vertex position and its uncertainties is" << endl; 
   x_v.Print();
   C_n.Print();
+  cout << endl;
 
   // TODO: add correlatons
-  TEllipse *vpos = new TEllipse(x_v[0][0],x_v[1][0],C_n[0][0],C_n[1][1]);
+  //TVectorD eigenValues;
+  //TMatrixD eigenVectors = C_n.EigenVectors(eigenValues); 
+  //eigenValues.Print();
+  //eigenVectors.Print();
+
+  TEllipse *vpos = new TEllipse(x_v[0][0],x_v[1][0],C_n[0][0],C_n[1][1],0,360);
   vpos->Draw();
 
   // Compute the new direction and the full covariance matrix
@@ -100,7 +142,6 @@ void vertex(){
   for(uint k = 0; k < measures.size(); ++k){
 
     newdirections.push_back(W[k]*B_T[k]*G[k]*(measures[k]-ce[k]-A[k]*x_v));
-    newdirections[k].Print();
 
     // compute full chi2
     TMatrixD p_n_k = ce[k] + A[k]*x_v + B[k]*newdirections[k];
@@ -111,7 +152,9 @@ void vertex(){
     chi2 += r_n_k_T*G[k]*r_n_k;
 
   }
-  chi2.Print();
   
+  cout << "Chi2 of the vertex" << endl;
+  chi2.Print();
+  cout << "n.d.f.: " << 2*measures.size()-2 << endl;
 
 }
